@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fitness Tracker</title>
+<link rel="manifest" href="manifest.json">
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+body { margin:0; font-family: Arial,sans-serif; background: #f4f4f4; }
+header { background: #28a745; color: #fff; text-align: center; padding: 15px 0; font-size: 1.5em; }
+nav { display:flex; justify-content: space-around; background: #fff; border-top: 1px solid #ccc; position: fixed; bottom: 0; width: 100%; }
+nav button { flex:1; padding: 10px; border:none; background:none; font-size:1em; cursor:pointer; }
+nav button.active { color: #28a745; font-weight:bold; }
+.tab { display:none; padding: 20px; max-width:700px; margin:0 auto; }
+.tab.active { display:block; }
+input, button { width:100%; padding:10px; margin:5px 0; box-sizing:border-box; }
+button { background:#28a745; color:#fff; border:none; border-radius:5px; cursor:pointer; }
+button:hover { background:#218838; }
+table { width:100%; border-collapse: collapse; margin-top:10px; }
+th, td { border:1px solid #ddd; padding:8px; text-align:center; }
+th { background:#333; color:#fff; }
+.pr { font-weight:bold; color:#d63384; }
+canvas { margin-top:20px; }
+</style>
+</head>
+<body>
+
+<header>Fitness Tracker</header>
+
+<div id="tab1" class="tab active">
+  <h2>Nieuwe Training</h2>
+  <input type="text" id="exerciseInput" placeholder="Oefening (bijv. Bench Press)">
+  <input type="number" id="weightInput" placeholder="Gewicht (kg)">
+  <input type="number" id="repsInput" placeholder="Reps">
+  <button onclick="addEntry()">Voeg training toe</button>
+</div>
+
+<div id="tab2" class="tab">
+  <h2>Overzicht</h2>
+  <table id="workoutTable">
+    <thead>
+      <tr><th>Datum</th><th>Oefening</th><th>Gewicht</th><th>Reps</th><th>PR</th></tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+</div>
+
+<div id="tab3" class="tab">
+  <h2>Progressie Grafiek</h2>
+  <canvas id="progressChart"></canvas>
+</div>
+
+<nav>
+  <button class="active" onclick="switchTab(1)">Training</button>
+  <button onclick="switchTab(2)">Overzicht</button>
+  <button onclick="switchTab(3)">Grafiek</button>
+</nav>
+
+<script>
+if('serviceWorker' in navigator){ navigator.serviceWorker.register('service-worker.js'); }
+
+function switchTab(n){
+  document.querySelectorAll('.tab').forEach((t,i)=> t.classList.remove('active'));
+  document.getElementById('tab'+n).classList.add('active');
+  document.querySelectorAll('nav button').forEach((b,i)=>b.classList.remove('active'));
+  document.querySelectorAll('nav button')[n-1].classList.add('active');
+}
+
+let workoutLog = JSON.parse(localStorage.getItem('workoutLog'))||[];
+function saveData(){ localStorage.setItem('workoutLog', JSON.stringify(workoutLog)); }
+
+function addEntry(){
+  const ex=document.getElementById('exerciseInput').value.trim();
+  const w=Number(document.getElementById('weightInput').value);
+  const r=Number(document.getElementById('repsInput').value);
+  if(!ex||!w||!r){ alert('Vul alle velden in!'); return; }
+  workoutLog.push({date:new Date().toLocaleDateString(), exercise:ex, weight:w, reps:r});
+  saveData(); updateTable(); updateChart();
+  document.getElementById('exerciseInput').value='';
+  document.getElementById('weightInput').value='';
+  document.getElementById('repsInput').value='';
+}
+
+function getPR(ex){const entries=workoutLog.filter(e=>e.exercise===ex);return entries.length?Math.max(...entries.map(e=>e.weight)):'-';}
+
+function updateTable(){
+  const tbody=document.querySelector('#workoutTable tbody'); tbody.innerHTML='';
+  workoutLog.forEach(e=>{
+    const pr=getPR(e.exercise);
+    tbody.innerHTML+=`<tr><td>${e.date}</td><td>${e.exercise}</td><td>${e.weight}</td><td>${e.reps}</td><td class="pr">${e.weight===pr?'🔥 '+pr:pr}</td></tr>`;
+  });
+}
+
+const ctx=document.getElementById('progressChart').getContext('2d');
+const chartData={labels:[], datasets:[]};
+const chartConfig={type:'line', data:chartData, options:{responsive:true,plugins:{legend:{display:true}},scales:{y:{beginAtZero:true,title:{display:true,text:'Gewicht (kg)'}}}}};
+const progressChart=new Chart(ctx,chartConfig);
+
+function updateChart(){
+  const exercises=[...new Set(workoutLog.map(e=>e.exercise))];
+  chartData.labels=[...new Set(workoutLog.map(e=>e.date))];
+  chartData.datasets=exercises.map((ex,index)=>{
+    const map={}; workoutLog.filter(e=>e.exercise===ex).forEach(e=>map[e.date]=e.weight);
+    return {label:ex,data:chartData.labels.map(d=>map[d]||null),borderColor:`hsl(${index*60%360},70%,50%)`,fill:false,tension:0.3};
+  });
+  progressChart.update();
+}
+
+updateTable(); updateChart();
+</script>
+
+</body>
+</html>
